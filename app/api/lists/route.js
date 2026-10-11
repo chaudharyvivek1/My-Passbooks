@@ -43,3 +43,43 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Failed to create list' }, { status: 500 });
   }
 }
+
+export async function DELETE(request) {
+  try {
+    const body = await request.json();
+    const { ids, hard } = body;
+    
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json({ error: 'IDs array required' }, { status: 400 });
+    }
+
+    if (hard) {
+      await pool.query('DELETE FROM transactions WHERE listId IN (?)', [ids]);
+      await pool.query('DELETE FROM lists WHERE id IN (?)', [ids]);
+    } else {
+      await pool.query('UPDATE lists SET isDeleted = TRUE WHERE id IN (?)', [ids]);
+    }
+    
+    return NextResponse.json({ success: true, count: ids.length });
+  } catch (e) {
+    console.error(e);
+    return NextResponse.json({ error: 'Failed to delete lists' }, { status: 500 });
+  }
+}
+
+export async function PUT(request) {
+  try {
+    const body = await request.json();
+    const { ids, restore } = body;
+
+    if (restore && Array.isArray(ids) && ids.length > 0) {
+      await pool.query('UPDATE lists SET isDeleted = FALSE WHERE id IN (?)', [ids]);
+      return NextResponse.json({ success: true, count: ids.length });
+    }
+
+    return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+  } catch (e) {
+    console.error(e);
+    return NextResponse.json({ error: 'Failed to update lists' }, { status: 500 });
+  }
+}

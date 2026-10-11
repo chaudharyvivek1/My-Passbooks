@@ -23,6 +23,7 @@ export default function AppLayout({ children }) {
   const [lists, setLists] = useState([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isAddingList, setIsAddingList] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -61,6 +62,8 @@ export default function AppLayout({ children }) {
   }, [pathname, router]);
 
   const handleAddList = async () => {
+    if (isAddingList) return;
+    setIsAddingList(true);
     try {
       const res = await fetch('/api/lists', {
         method: 'POST',
@@ -76,6 +79,8 @@ export default function AppLayout({ children }) {
       }
     } catch (e) {
       alert('Could not add list.');
+    } finally {
+      setIsAddingList(false);
     }
   };
 
