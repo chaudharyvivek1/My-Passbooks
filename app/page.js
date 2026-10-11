@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Container, Grid, Card, CardContent, Typography, CardActionArea, Box, 
   Dialog, DialogTitle, DialogContent, TextField, DialogActions, Button, 
-  IconButton, Fab, Paper, CircularProgress, Backdrop, Checkbox, Chip, Snackbar, Alert 
+  IconButton, Fab, Paper, CircularProgress, Backdrop, Checkbox, Chip, Snackbar, Alert, Tooltip 
 } from '@mui/material';
 import { useRouter } from 'next/navigation';
 import AddIcon from '@mui/icons-material/Add';
@@ -12,6 +12,7 @@ import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import DeleteIcon from '@mui/icons-material/Delete';
 import RestoreIcon from '@mui/icons-material/Restore';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
+import DownloadIcon from '@mui/icons-material/Download';
 
 export default function Dashboard() {
   const [lists, setLists] = useState([]);
@@ -107,6 +108,92 @@ export default function Dashboard() {
       }
     } catch (e) {
       setToast({ open: true, message: 'Could not delete passbook.', severity: 'error' });
+    }
+  };
+
+  const handleDownloadPassbook = async (e, list) => {
+    e.stopPropagation(); // prevent card click navigation
+    try {
+      let transactions = [];
+      try {
+        const res = await fetch(`/api/transactions?listId=${list.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          transactions = Array.isArray(data) ? data : [];
+        }
+      } catch (fetchErr) {
+        console.warn('Error fetching transactions for download:', fetchErr);
+      }
+
+      const totalIncome = transactions
+        .filter(t => t.type === 'in')
+        .reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
+      const totalExpense = transactions
+        .filter(t => t.type === 'out')
+        .reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
+      const balance = totalIncome - totalExpense;
+
+      const dateStr = new Date().toLocaleString();
+      const divider = '='.repeat(70);
+      const subDivider = '-'.repeat(70);
+
+      let content = `${divider}\n`;
+      content += `                        PASSBOOK STATEMENT\n`;
+      content += `${divider}\n`;
+      content += `Passbook Name : ${list.name}\n`;
+      content += `Passbook ID   : ${list.id}\n`;
+      content += `Export Date   : ${dateStr}\n`;
+      content += `Total Entries : ${transactions.length}\n`;
+      content += `${divider}\n\n`;
+
+      content += `${subDivider}\n`;
+      content += `DATE & TIME               TYPE    AMOUNT        DESCRIPTION\n`;
+      content += `${subDivider}\n`;
+
+      if (transactions.length === 0) {
+        content += `(No transactions recorded yet)\n`;
+      } else {
+        transactions.forEach((tx) => {
+          const amt = parseFloat(tx.amount) || 0;
+          const dt = (tx.date || '-').padEnd(25, ' ');
+          const tp = (tx.type === 'in' ? 'IN' : 'OUT').padEnd(7, ' ');
+          const amtStr = ((tx.type === 'in' ? '+' : '-') + '$' + amt.toFixed(2)).padEnd(13, ' ');
+          const desc = tx.description || '-';
+          content += `${dt} ${tp} ${amtStr} ${desc}\n`;
+        });
+      }
+
+      content += `${subDivider}\n\n`;
+      content += `SUMMARY\n`;
+      content += `${subDivider}\n`;
+      content += `Total Income (IN)  : $${totalIncome.toFixed(2)}\n`;
+      content += `Total Expense (OUT): $${totalExpense.toFixed(2)}\n`;
+      content += `Net Balance        : $${balance.toFixed(2)}\n`;
+      content += `${divider}\n`;
+
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const safeName = (list.name || 'passbook').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+      a.href = url;
+      a.download = `${safeName}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      setToast({ 
+        open: true, 
+        message: `Downloaded "${list.name}.txt" notepad file successfully!`, 
+        severity: 'success' 
+      });
+    } catch (err) {
+      console.error(err);
+      setToast({ 
+        open: true, 
+        message: 'Could not download passbook notepad file.', 
+        severity: 'error' 
+      });
     }
   };
 
@@ -245,14 +332,36 @@ export default function Dashboard() {
         {lists.map((list) => (
           <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={list.id}>
             <Card elevation={2} sx={{ borderRadius: 3, height: '100%', position: 'relative', transition: 'transform 0.2s', '&:hover': { transform: 'translateY(-4px)', boxShadow: 6 } }}>
-              <IconButton 
-                size="small" 
-                color="error" 
-                onClick={(e) => handleSoftDelete(e, list.id)}
-                sx={{ position: 'absolute', top: 8, right: 8, zIndex: 10, bgcolor: 'background.paper', '&:hover': { bgcolor: 'error.light', color: 'white' } }}
-              >
-                <DeleteIcon fontSize="small" />
-              </IconButton>
+              <Box sx={{ position: 'absolute', top: 8, right: 8, zIndex: 10, display: 'flex', gap: 0.8 }}>
+                <Tooltip title="Download Notepad file (.txt)">
+                  <IconButton 
+                    size="small" 
+                    color="primary" 
+                    onClick={(e) => handleDownloadPassbook(e, list)}
+                    sx={{ 
+                      bgcolor: 'background.paper', 
+                      boxShadow: 1,
+                      '&:hover': { bgcolor: 'primary.main', color: 'white' } 
+                    }}
+                  >
+                    <DownloadIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Delete Passbook">
+                  <IconButton 
+                    size="small" 
+                    color="error" 
+                    onClick={(e) => handleSoftDelete(e, list.id)}
+                    sx={{ 
+                      bgcolor: 'background.paper', 
+                      boxShadow: 1,
+                      '&:hover': { bgcolor: 'error.light', color: 'white' } 
+                    }}
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Box>
               <CardActionArea onClick={() => router.push(`/list/${list.id}`)} sx={{ height: '100%', p: 3 }}>
                 <CardContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', p: 0 }}>
                   <AccountBalanceWalletIcon sx={{ fontSize: 60, color: 'primary.main', mb: 2, opacity: 0.9 }} />
